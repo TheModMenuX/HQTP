@@ -1,39 +1,63 @@
+
 import numpy as np
-from typing import Callable, List
+from typing import Callable, List, Optional
 from .statevector import QuantumRegister
 from .gates import hadamard_all, phase_oracle, diffusion
 
-def grover_search(
-    oracle_func: Callable[[List[int]], bool],
-    num_qubits: int,
-    num_iterations: int = None
-) -> List[int]:
+def grover_search(num_vars: int, oracle: Callable[[List[int]], bool], 
+                 max_iterations: int = None) -> Optional[List[int]]:
     """
-    Implement Grover's algorithm
+    Grover's algorithm for searching satisfying assignments
     
     Args:
-        oracle_func: Function that returns True for marked states
-        num_qubits: Number of qubits in search space
-        num_iterations: Number of Grover iterations (defaults to π/4 * sqrt(N))
+        num_vars: Number of Boolean variables
+        oracle: Function that returns True for satisfying assignments
+        max_iterations: Maximum Grover iterations
     
     Returns:
-        Measured bit string that hopefully satisfies oracle
+        Satisfying assignment or None if not found
     """
-    if num_iterations is None:
-        # π/4 * sqrt(N) iterations
-        num_iterations = int(np.pi/4 * np.sqrt(2**num_qubits))
-        
-    # Initialize in uniform superposition
-    reg = QuantumRegister(num_qubits)
+    if max_iterations is None:
+        max_iterations = int(np.pi * np.sqrt(2**num_vars) / 4)
+    
+    # Initialize quantum register
+    reg = QuantumRegister(num_vars)
+    
+    # Create uniform superposition
     hadamard_all(reg)
     
     # Grover iterations
-    for _ in range(num_iterations):
-        # Oracle
-        phase_oracle(reg, oracle_func)
-        # Diffusion
-        hadamard_all(reg)
+    for _ in range(max_iterations):
+        # Apply oracle
+        phase_oracle(reg, oracle)
+        
+        # Apply diffusion operator
         diffusion(reg)
+    
+    # Measure result
+    result = reg.measure()
+    
+    # Verify result
+    if oracle(result):
+        return result
+    
+    return None
+
+def amplitude_amplification(reg: QuantumRegister, 
+                          oracle: Callable[[List[int]], bool],
+                          iterations: int):
+    """Apply amplitude amplification for the given oracle"""
+    for _ in range(iterations):
+        # Mark target states
+        phase_oracle(reg, oracle)
+        
+        # Invert about average
         hadamard_all(reg)
         
-    return reg.measure()
+        # Phase flip |0...0⟩
+        reg.state[0] *= -1
+        
+        hadamard_all(reg)
+        
+        # Global phase correction
+        reg.state *= -1

@@ -1,36 +1,63 @@
-from dataclasses import dataclass
-from typing import List, Set
 
-@dataclass(frozen=True)
+from typing import List, Set
+from dataclasses import dataclass
+
+@dataclass
 class Literal:
     var: int
     positive: bool
     
-    def __invert__(self) -> 'Literal':
-        """Return negation of literal"""
-        return Literal(self.var, not self.positive)
-
-@dataclass(frozen=True)
-class Clause:
-    literals: Set[Literal]
+    def __hash__(self):
+        return hash((self.var, self.positive))
     
-    def __len__(self) -> int:
-        return len(self.literals)
-    
-    def is_unit(self) -> bool:
-        """Check if clause has exactly one literal"""
-        return len(self.literals) == 1
-    
-    def is_empty(self) -> bool:
-        """Check if clause has no literals"""
-        return len(self.literals) == 0
+    def __eq__(self, other):
+        return self.var == other.var and self.positive == other.positive
 
 @dataclass
+class Clause:
+    literals: List[Literal]
+    
+    def __hash__(self):
+        return hash(tuple(sorted(self.literals, key=lambda l: (l.var, l.positive))))
+    
+    def __len__(self):
+        return len(self.literals)
+
 class CNFFormula:
-    clauses: List[Clause]
-    num_vars: int
+    """Conjunctive Normal Form formula representation"""
+    
+    def __init__(self):
+        self.clauses: List[Clause] = []
+        self.num_vars = 0
     
     def add_clause(self, clause: Clause):
+        """Add clause to formula"""
         self.clauses.append(clause)
+        
+        # Update variable count
         for lit in clause.literals:
             self.num_vars = max(self.num_vars, lit.var)
+    
+    def get_variables(self) -> Set[int]:
+        """Get all variables in formula"""
+        variables = set()
+        for clause in self.clauses:
+            for lit in clause.literals:
+                variables.add(lit.var)
+        return variables
+    
+    def is_satisfied(self, assignment: dict) -> bool:
+        """Check if formula is satisfied by assignment"""
+        for clause in self.clauses:
+            clause_satisfied = False
+            
+            for lit in clause.literals:
+                if lit.var in assignment:
+                    if assignment[lit.var] == lit.positive:
+                        clause_satisfied = True
+                        break
+            
+            if not clause_satisfied:
+                return False
+        
+        return True

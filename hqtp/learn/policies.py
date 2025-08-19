@@ -1,61 +1,108 @@
+
 import numpy as np
-from typing import List
 import torch
 import torch.nn as nn
+import torch.optim as optim
+from typing import List
+from ..logic.parser import Clause, Literal
 from .features import extract_clause_features, extract_literal_features
 
-class SimpleNN(nn.Module):
-    """Simple neural network for scoring clauses/literals"""
+class ClausePolicy(nn.Module):
+    """Neural network policy for clause selection"""
     
-    def __init__(self, input_size: int, hidden_size: int = 32):
+    def __init__(self, feature_dim: int = 8, hidden_dim: int = 64):
         super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(input_size, hidden_size),
+        self.network = nn.Sequential(
+            nn.Linear(feature_dim, hidden_dim),
             nn.ReLU(),
-            nn.Linear(hidden_size, 1),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, 1),
             nn.Sigmoid()
         )
-        
-    def forward(self, x):
-        return self.net(x)
-
-class ClausePolicy:
-    """Policy for selecting clauses"""
+        self.optimizer = optim.Adam(self.parameters(), lr=0.001)
+        self.feature_dim = feature_dim
     
-    def __init__(self):
-        self.model = SimpleNN(input_size=3)  # Adjust based on features
-        self.optimizer = torch.optim.Adam(self.model.parameters())
-        
-    def score_clause(self, clause) -> float:
+    def score_clause(self, clause: Clause) -> float:
+        """Score a clause for selection"""
         features = extract_clause_features(clause)
+        
+        # Pad or truncate features to expected dimension
+        if len(features) < self.feature_dim:
+            features = np.pad(features, (0, self.feature_dim - len(features)))
+        else:
+            features = features[:self.feature_dim]
+        
         with torch.no_grad():
-            return float(self.model(torch.FloatTensor(features)))
-            
-    def update(self, clause, reward: float):
+            features_tensor = torch.FloatTensor(features).unsqueeze(0)
+            score = self.network(features_tensor).item()
+        
+        return score
+    
+    def update(self, clause: Clause, reward: float):
         """Update policy based on reward"""
         features = extract_clause_features(clause)
+        
+        if len(features) < self.feature_dim:
+            features = np.pad(features, (0, self.feature_dim - len(features)))
+        else:
+            features = features[:self.feature_dim]
+        
+        features_tensor = torch.FloatTensor(features).unsqueeze(0)
+        score = self.network(features_tensor)
+        
+        # Simple policy gradient update
+        loss = -reward * torch.log(score + 1e-8)
+        
         self.optimizer.zero_grad()
-        score = self.model(torch.FloatTensor(features))
-        loss = nn.MSELoss()(score, torch.FloatTensor([reward]))
         loss.backward()
         self.optimizer.step()
 
-class LiteralPolicy:
-    """Policy for selecting literals"""
+class LiteralPolicy(nn.Module):
+    """Neural network policy for literal selection"""
     
-    def __init__(self):
-        self.model = SimpleNN(input_size=2)  # Adjust based on features
-        self.optimizer = torch.optim.Adam(self.model.parameters())
+    def __init__(self, feature_dim: int = 6, hidden_dim: int = 32):
+        super().__init__()
+        self.network = nn.Sequential(
+            nn.Linear(feature_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, 1),
+            nn.Sigmoid()
+        )
+        self.optimizer = optim.Adam(self.parameters(), lr=0.001)
+        self.feature_dim = feature_dim
+    
+    def score_literal(self, literal: Literal, clause: Clause) -> float:
+        """Score a literal for selection"""
+        features = extract_literal_features(literal, clause)
         
-    def score_literal(self, literal, clause) -> float:
-        features = extract_literal_features(literal, clause)
+        if len(features) < self.feature_dim:
+            features = np.pad(features, (0, self.feature_dim - len(features)))
+        else:
+            features = features[:self.feature_dim]
+        
         with torch.no_grad():
-            return float(self.model(torch.FloatTensor(features)))
-            
-    def update(self, literal, clause, reward: float):
+            features_tensor = torch.FloatTensor(features).unsqueeze(0)
+            score = self.network(features_tensor).item()
+        
+        return score
+    
+    def update(self, literal: Literal, clause: Clause, reward: float):
+        """Update policy based on reward"""
         features = extract_literal_features(literal, clause)
+        
+        if len(features) < self.feature_dim:
+            features = np.pad(features, (0, self.feature_dim - len(features)))
+        else:
+            features = features[:self.feature_dim]
+        
+        features_tensor = torch.FloatTensor(features).unsqueeze(0)
+        score = self.network(features_tensor)
+        
+        loss = -reward * torch.log(score + 1e-8)
+        
         self.optimizer.zero_grad()
-        score = self.model(torch.FloatTensor(features))
-        loss = nn.MSELoss()(score, torch.FloatTensor([reward]))
         loss.backward()
         self.optimizer.step()

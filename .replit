@@ -6,3 +6,24 @@ packages = ["python312Packages.numpy", "python313Packages.torchWithoutCuda"]
 
 [deployment]
 run = ["sh", "-c", "python"]
+
+[workflows]
+runButton = "Run HQTP"
+
+[[workflows.workflow]]
+name = "Run HQTP"
+author = 19316748
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python -m hqtp.cli input.p --quantum --learning"
+
+[[workflows.workflow]]
+name = "Run HQTP"
+author = 19316748
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python -m hqtp.cli input.p --quantum --learning"
